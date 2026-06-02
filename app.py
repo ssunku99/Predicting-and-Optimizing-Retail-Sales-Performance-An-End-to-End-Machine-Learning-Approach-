@@ -646,33 +646,42 @@ with tab_drv:
 with tab_rec:
     from retailmind.recommend import summary_metrics
 
-    st.markdown("### Order recommendations")
+    st.markdown("### What to order")
     st.caption(
-        "Periodic-review (R, S) inventory model. Every `review period` days you check "
-        "stock and order up to a target level that covers demand until the next review "
-        "plus a safety buffer sized by your service level."
+        "Based on the forecast, here's what to order, when, and why — in plain English. "
+        "Tweak the sliders if your delivery schedule is different."
     )
 
-    # --- Controls (per-tab refinements on top of the sidebar) ---
-    review_period = st.slider("Review period (days)", 1, 30, 7,
-                               help="How often you re-evaluate stock and place orders.")
+    # --- Controls (per-tab refinement on top of the sidebar) ---
+    col_a, col_b = st.columns([1, 2])
+    with col_a:
+        review_period = st.slider("Check stock every (days)", 1, 30, 7,
+                                   help="How often you re-check shelves and place orders.")
+    with col_b:
+        st.caption(
+            f"Using **{lead_time}-day delivery** and aiming to avoid stock-outs "
+            f"**{service_level:.0%}** of the time. (Adjust both in the left sidebar.)"
+        )
 
-    # --- On-hand inventory input ---
-    st.markdown("#### Current on-hand stock (optional)")
-    st.caption("Enter how many units you currently have per entity. Leave blank → assumes 0 (worst case: empty shelves).")
-    forecast_entities = sorted(R["forecast"]["entity_id"].unique())
-    oh_df = pd.DataFrame({"entity_id": [str(e) for e in forecast_entities], "on_hand": 0.0})
-    edited_oh = st.data_editor(
-        oh_df,
-        column_config={
-            "entity_id": st.column_config.TextColumn("Entity", disabled=True),
-            "on_hand": st.column_config.NumberColumn("On-hand stock (units)",
-                                                       min_value=0, step=10, format="%.1f"),
-        },
-        hide_index=True, width="stretch", key="on_hand_editor",
-    )
+    # --- On-hand inventory input (tucked behind expander — most users skip it) ---
+    with st.expander("Already have stock on the shelves? Enter it here.", expanded=False):
+        st.caption(
+            "Tell us what you have for each item. Anything left at zero is treated as "
+            "empty shelves (worst case)."
+        )
+        forecast_entities = sorted(R["forecast"]["entity_id"].unique())
+        oh_df = pd.DataFrame({"entity_id": [str(e) for e in forecast_entities], "on_hand": 0.0})
+        edited_oh = st.data_editor(
+            oh_df,
+            column_config={
+                "entity_id": st.column_config.TextColumn("Item", disabled=True),
+                "on_hand": st.column_config.NumberColumn("Units in stock",
+                                                          min_value=0, step=10, format="%.1f"),
+            },
+            hide_index=True, width="stretch", key="on_hand_editor",
+        )
 
-    # --- Compute recommendations with the new model ---
+    # --- Compute recommendations with the inventory model ---
     params = RecommendationParams(
         lead_time_days=lead_time,
         service_level=service_level,
@@ -681,60 +690,128 @@ with tab_rec:
     recs = recommend_orders(R["forecast"], on_hand=edited_oh, params=params)
     sm = summary_metrics(recs)
 
-    # --- Headline KPIs ---
+    # --- Headline banner — one sentence the user can act on immediately ---
     if sm:
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("🔴 Urgent", sm["n_urgent"],
-                  help="Stock will run out before the next order arrives.")
-        c2.metric("🟡 Reorder soon", sm["n_reorder_soon"],
-                  help="Stock would last past lead time but not past next review.")
-        c3.metric("🟢 Stocked", sm["n_stocked"],
-                  help="Enough on-hand to cover the entire review + lead window.")
-        c4.metric("Total units to order", f"{sm['total_order_qty']:,.0f}")
+        if sm["n_urgent"] > 0:
+            st.error(
+                f"**{sm['n_urgent']} item(s) need ordering right now.**  "
+                f"Total to order across everything: **{int(sm['total_order_qty']):,} units**."
+            )
+        elif sm["n_reorder_soon"] > 0:
+            st.warning(
+                f"**{sm['n_reorder_soon']} item(s) will run low soon.** "
+                f"Plan an order in the next few days."
+            )
+        else:
+            st.success("**All items are well-stocked.** Nothing to order right now.")
 
-    # --- Explanation banner ---
-    with st.expander("ℹ️ How to read this table", expanded=False):
-        st.markdown("""
-        | Column | Meaning |
-        |---|---|
-        | **urgency** | 🔴 urgent / 🟡 reorder soon / 🟢 stocked — based on days-of-cover vs lead time |
-        | **on_hand** | Current stock (what you entered above) |
-        | **days_of_cover** | At current daily demand, how long your on-hand stock lasts |
-        | **mean_daily_demand** | Average forecasted demand per day over the next lead+review days |
-        | **demand_std** | Variability of the forecasted demand (drives safety stock) |
-        | **reorder_point** | Continuous-review trigger: order when stock drops to this |
-        | **target_stock_level** | Order *up to* this level (periodic-review target) |
-        | **recommended_order_qty** | `max(0, target_stock - on_hand)` — what to order right now |
+        # 3 status cards
+        c1, c2, c3 = st.columns(3)
+        c1.metric("🔴 Order now", sm["n_urgent"],
+                  help="On-hand stock will run out before the next delivery arrives.")
+        c2.metric("🟡 Order soon", sm["n_reorder_soon"],
+                  help="Stock lasts past the next delivery but not past the next check.")
+        c3.metric("🟢 Well-stocked", sm["n_stocked"],
+                  help="Plenty to cover the whole cycle.")
 
-        The recommendation uses the **next (lead + review) days of your forecast** for demand stats — not the whole horizon — so it matches the inventory cycle.
-        """)
-
-    st.markdown(f"**Recommendations** "
-                f"(service level {service_level:.0%}, lead time {lead_time}d, review {review_period}d)")
-    st.dataframe(recs, width="stretch")
-    st.download_button("⬇ Download recommendations CSV", recs.to_csv(index=False).encode(),
-                       file_name="recommendations.csv")
-
-    # --- Visualization: forecast vs reorder point per entity ---
+    # --- Per-item narrative cards — the most important new piece ---
     if not recs.empty:
-        st.markdown("#### Forecast vs reorder point per entity")
-        pick = st.selectbox("Entity to visualize",
-                             recs["entity_id"].tolist(), key="rec_ent")
-        f = R["forecast"][R["forecast"]["entity_id"].astype(str) == pick]
-        r_row = recs[recs["entity_id"] == pick].iloc[0]
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=f["date"], y=f["yhat"], name="Forecast",
-                                  mode="lines+markers"))
-        fig.add_hline(y=r_row["reorder_point"], line_dash="dot", line_color="orange",
-                       annotation_text="Reorder point", annotation_position="right")
-        fig.add_hline(y=r_row["target_stock_level"], line_dash="dash", line_color="green",
-                       annotation_text="Target stock S", annotation_position="right")
-        fig.add_hline(y=r_row["on_hand"], line_dash="dashdot", line_color="blue",
-                       annotation_text="On-hand", annotation_position="right")
-        fig.update_layout(title=f"{pick} — daily forecast vs inventory bands",
-                           xaxis_title="date", yaxis_title="units",
-                           height=380, margin=dict(l=40, r=80, t=50, b=40))
-        st.plotly_chart(fig, width="stretch")
+        urgent_recs = recs[recs["urgency"] == "🔴 urgent"]
+        soon_recs   = recs[recs["urgency"] == "🟡 reorder soon"]
+        ok_recs     = recs[recs["urgency"] == "🟢 stocked"]
+
+        if not urgent_recs.empty:
+            st.markdown("#### Order these now")
+            for _, row in urgent_recs.iterrows():
+                qty   = int(round(row["recommended_order_qty"]))
+                hand  = int(round(row["on_hand"]))
+                dmd   = row["mean_daily_demand"]
+                cover = row["days_of_cover"]
+                cover_phrase = ("you'd run out before the next delivery arrives"
+                                 if cover < lead_time
+                                 else f"you'd run out in about {cover:.0f} days")
+                st.markdown(
+                    f"**{row['entity_id']}** — order **{qty:,} units** within the next "
+                    f"**{review_period} days**.  \n"
+                    f"<span style='color:#64748B'>You have **{hand} units** on hand. "
+                    f"At a forecasted demand of **{dmd:.1f} units/day**, {cover_phrase} "
+                    f"(delivery takes {lead_time} days).</span>",
+                    unsafe_allow_html=True,
+                )
+                st.divider()
+
+        if not soon_recs.empty:
+            st.markdown("#### Plan to order in the next few days")
+            for _, row in soon_recs.iterrows():
+                qty  = int(round(row["recommended_order_qty"]))
+                hand = int(round(row["on_hand"]))
+                dmd  = row["mean_daily_demand"]
+                st.markdown(
+                    f"**{row['entity_id']}** — order **{qty:,} units** within "
+                    f"**{review_period} days**.  \n"
+                    f"<span style='color:#64748B'>You have {hand} on hand · "
+                    f"demand ≈ {dmd:.1f} units/day.</span>",
+                    unsafe_allow_html=True,
+                )
+                st.divider()
+
+        if not urgent_recs.empty or not soon_recs.empty:
+            if not ok_recs.empty:
+                ok_names = ", ".join(str(e) for e in ok_recs["entity_id"].head(5))
+                more = f" and {len(ok_recs) - 5} more" if len(ok_recs) > 5 else ""
+                st.caption(f"✓ Well-stocked, no action: {ok_names}{more}.")
+        elif not ok_recs.empty:
+            st.caption("✓ Every item is well-stocked. Check back after your next review.")
+
+    # --- Full details table (collapsed by default) ---
+    if not recs.empty:
+        with st.expander("Show the full numbers for every item", expanded=False):
+            st.caption(
+                "Power-user view. Same data, no narrative. "
+                "Useful if you want to paste it into a spreadsheet."
+            )
+            rec_display = recs.rename(columns={
+                "entity_id":              "Item",
+                "urgency":                "Status",
+                "on_hand":                "In stock now",
+                "days_of_cover":          "Days of stock left",
+                "mean_daily_demand":      "Forecasted demand / day",
+                "demand_std":             "Demand variability",
+                "lead_time":              "Lead time (days)",
+                "review_period":          "Review period (days)",
+                "service_level":          "Service level",
+                "reorder_point":          "Reorder when stock hits",
+                "target_stock_level":     "Order up to this level",
+                "recommended_order_qty":  "Order this many",
+            })
+            st.dataframe(rec_display, width="stretch")
+            st.download_button("Download as CSV", recs.to_csv(index=False).encode(),
+                                file_name="recommendations.csv")
+
+    # --- Per-item chart (collapsed by default for cleaner first view) ---
+    if not recs.empty:
+        with st.expander("See it on a chart", expanded=False):
+            st.caption("Pick an item to see how the daily forecast lines up with stock levels.")
+            pick = st.selectbox("Item",
+                                 recs["entity_id"].tolist(), key="rec_ent")
+            f = R["forecast"][R["forecast"]["entity_id"].astype(str) == pick]
+            r_row = recs[recs["entity_id"] == pick].iloc[0]
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=f["date"], y=f["yhat"], name="Daily forecast",
+                                      mode="lines+markers", line=dict(color="#1f77b4")))
+            fig.add_hline(y=r_row["reorder_point"], line_dash="dot", line_color="orange",
+                           annotation_text="Reorder when stock drops here",
+                           annotation_position="right")
+            fig.add_hline(y=r_row["target_stock_level"], line_dash="dash", line_color="green",
+                           annotation_text="Order up to this level",
+                           annotation_position="right")
+            fig.add_hline(y=r_row["on_hand"], line_dash="dashdot", line_color="blue",
+                           annotation_text="What you have now",
+                           annotation_position="right")
+            fig.update_layout(title=f"{pick} — forecast vs stock targets",
+                               xaxis_title="Date", yaxis_title="Units",
+                               height=380, margin=dict(l=40, r=80, t=50, b=40))
+            st.plotly_chart(fig, width="stretch")
 
 # ----- Chat / Q&A assistant -----
 with tab_chat:
