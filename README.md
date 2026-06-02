@@ -45,7 +45,6 @@ notebooks/          # one notebook per stage (run in order or jump around)
 
 app.py              # Streamlit app — upload any CSV and run the pipeline
 tests/              # pytest suite that runs same checks on both datasets
-docs/               # generated HTML reports for GitHub Pages
 health_check.py     # quick script to validate any dataset before running
 requirements.txt
 ```
