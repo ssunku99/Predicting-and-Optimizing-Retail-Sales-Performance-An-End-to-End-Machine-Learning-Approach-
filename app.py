@@ -527,11 +527,26 @@ with tab_drv:
 
     if use_automl and st.button("Re-fit with AutoML", type="primary"):
         from retailmind.automl import fit_flaml_driver_model
-        with st.spinner(f"FLAML searching across 4 model families for {budget}s..."):
-            df_sub = R.get("df_sub", R["canon"])
-            new_rep = fit_flaml_driver_model(df_sub, time_budget=int(budget), cv_folds=2)
-            st.session_state.results["drivers"] = new_rep
-            st.rerun()
+        try:
+            with st.spinner(f"FLAML searching across 4 model families for {budget}s..."):
+                df_sub = R.get("df_sub", R["canon"])
+                new_rep = fit_flaml_driver_model(df_sub, time_budget=int(budget), cv_folds=2)
+                st.session_state.results["drivers"] = new_rep
+                st.rerun()
+        except ValueError as e:
+            # Most common failure: data too sparse for AutoML after lag-feature
+            # construction (e.g. daily Q1 with ~150 entities × 8 days each).
+            st.error(
+                f"AutoML couldn't fit: {e}\n\n"
+                "**Most common cause**: the canonical dataset is too small "
+                "after lag features are built. Try:\n"
+                "1. Switch **Aggregation frequency** in the sidebar to "
+                "**`W`** (weekly) or **`MS`** (monthly)\n"
+                "2. Click **▶ Run pipeline** again\n"
+                "3. Then come back to this tab and click *Re-fit with AutoML*"
+            )
+        except Exception as e:
+            st.error(f"AutoML failed unexpectedly — {type(e).__name__}: {e}")
 
     rep = R["drivers"]
     if "flaml" in rep.model_name.lower():
