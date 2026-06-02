@@ -313,10 +313,19 @@ def predict_future(
     future_dates_sorted = np.sort(future_df["date"].unique())
 
     # Aux lag features are static across the recursive loop (they don't depend on predicted sales),
-    # so compute them once up-front.
-    for c in aux_to_lag:
+    # so compute them once up-front. Derive the required lags PER aux column from the model's
+    # actual feature_cols — training uses freq-aware lags (e.g. (1, 2) at daily), but earlier
+    # versions of this loop hardcoded (1, 7) which caused KeyError on datasets with multiple
+    # numeric aux columns (unit_price, quantity, discount, profit).
+    aux_lags_needed: dict[str, set[int]] = {}
+    for f in feats:
+        for aux in aux_to_lag:
+            m = re.match(rf"{re.escape(aux)}_lag_(\d+)$", f)
+            if m:
+                aux_lags_needed.setdefault(aux, set()).add(int(m.group(1)))
+    for c, lags_for_c in aux_lags_needed.items():
         g = combined.groupby("entity_id", sort=False)[c]
-        for lag in (1, 7):
+        for lag in sorted(lags_for_c):
             combined[f"{c}_lag_{lag}"] = g.shift(lag)
 
     for d in future_dates_sorted:
