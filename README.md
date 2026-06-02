@@ -17,25 +17,7 @@ pipeline gives you back:
 5. reorder recommendations (how much to order, when, and why)
 6. a chat tab where you can ask things in plain English
 
-The whole point was to get this working on *any* retail dataset
-without rewriting code for each one. I tested it on two pretty
-different datasets — Rossmann (a million rows of daily store sales)
-and Walmart (8k rows of transactional order lines) — and the trick
-is a schema mapper in the middle that figures out which raw column
-means what.
-
-## Running it locally
-
-```bash
-git clone https://github.com/ssunku99/Predicting-and-Optimizing-Retail-Sales-Performance-An-End-to-End-Machine-Learning-Approach-.git
-cd Predicting-and-Optimizing-Retail-Sales-Performance-An-End-to-End-Machine-Learning-Approach-
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-It opens in your browser. There's a "Use bundled samples" option in
-the sidebar that loads the Rossmann data shipped with the repo, so
-you can try the whole thing without uploading anything.
+The goal was to make this work across different retail datasets without having to rewrite the code every time. I tested it on two very different datasets—Rossmann, which has around a million rows of daily store sales, and Walmart, which is much smaller with about 8,000 rows of transactional data. The key idea that made this possible was adding a schema mapper in between, which helps identify what each column represents in the raw data so the rest of the pipeline can stay the same.
 
 ## What's in the folder
 
@@ -109,15 +91,6 @@ customer count at the start of the day. After excluding that whole
 set of "same-day-leaky" features (I named them `LEAKY_CONTEMPORANEOUS`
 in features.py) R² dropped to a more honest 0.95.
 
-### Baseline lift over absolute R²
-
-A senior DS at a meetup told me "R² on its own is meaningless — show
-me how much better you are than the obvious baseline". So every
-metric in the pipeline is paired with a seasonal-naive baseline
-(yhat[t] = sales[t-7]). Rossmann gets 18.8% SMAPE vs 44.1% baseline,
-which is roughly a +82% RMSE lift. Walmart gets 87% vs 106% = +35%.
-The Walmart absolute numbers look bad on their own, but the lift
-over naive is real.
 
 ### Safety net
 
