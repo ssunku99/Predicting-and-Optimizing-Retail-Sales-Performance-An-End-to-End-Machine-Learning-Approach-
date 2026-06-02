@@ -838,11 +838,15 @@ with tab_chat:
     cols = st.columns(3)
     for i, ex in enumerate(examples):
         if cols[i % 3].button(ex, key=f"ex_{i}", width="stretch"):
-            st.session_state["chat_q"] = ex
+            # Write straight into the text_area's own widget key. Streamlit
+            # reruns after a button click, and because we set this BEFORE the
+            # widget is instantiated below, the box picks the value up. Using a
+            # separate key + value= does NOT work: a keyed widget ignores value=
+            # after first render, which is why the box never filled before.
+            st.session_state["chat_input"] = ex
 
     q = st.text_area(
         "Your question",
-        value=st.session_state.get("chat_q", ""),
         placeholder="e.g. Which days of the week have the highest sales? What's the best-performing entity? How should I prepare for next month?",
         height=80,
         key="chat_input",
