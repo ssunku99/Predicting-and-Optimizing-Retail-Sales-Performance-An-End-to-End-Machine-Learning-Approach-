@@ -92,7 +92,7 @@ def render_schema_wizard(raw: pd.DataFrame, schema: CanonicalSchema) -> Canonica
     missing roles, with smart per-column suggestions. The user literally
     cannot get stuck — every required role has a dropdown of every column.
     """
-    st.markdown("##### 🧙 Quick fix wizard")
+    st.markdown("##### Quick fix")
     st.caption("Pick the column that holds each required field. Suggestions are pre-selected.")
     cols = list(raw.columns)
     mapping = dict(schema.mapping)
@@ -243,8 +243,8 @@ class _PipelineShim:
 
 # ============= sidebar =============
 
-st.sidebar.title("🛒 RetailMind")
-st.sidebar.caption("Universal retail analytics pipeline")
+st.sidebar.title("RetailMind")
+st.sidebar.caption("Built for messy retail CSVs.")
 
 mode = st.sidebar.radio("Data source", ["Upload my own", "Use bundled samples"])
 
@@ -282,10 +282,10 @@ run_btn = st.sidebar.button("▶ Run pipeline", type="primary", disabled=main_pa
 # ============= main =============
 
 st.title("RetailMind")
-st.write("Universal pipeline for any retail sales dataset — schema mapper · EDA · forecasting · anomaly detection · driver analysis · order recommendations.")
+st.write("Drop in a retail CSV — get a forecast, anomalies, drivers, and an order plan back.")
 
 if main_path is None:
-    st.info("👈 Upload a file or pick a sample to get started.")
+    st.info("Upload a file or pick a sample from the sidebar to get started.")
     st.stop()
 
 # Always show schema mapping at the top
@@ -293,7 +293,7 @@ with st.spinner("Loading & inferring schema…"):
     raw = cached_load(main_path, tuple(aux_paths))
     auto_result = SchemaMapper().infer(raw)
 
-st.subheader("1️⃣  Schema mapping")
+st.subheader("Schema mapping")
 st.caption(f"Loaded **{raw.shape[0]:,} rows × {raw.shape[1]} columns**. "
             f"Edit any role that's wrong — every downstream module reads only canonical roles.")
 
@@ -336,7 +336,7 @@ if errors_now:
     st.stop()
 
 if not run_btn and not st.session_state.results:
-    st.success("✅ Schema looks good. Click **▶ Run pipeline** in the sidebar to start.")
+    st.success("Schema looks good. Hit **Run pipeline** in the sidebar.")
     st.stop()
 
 
@@ -381,7 +381,7 @@ if R.get("profile"):
                 f"{prof.get('pct_missing', 0):.1f}% missing · "
                 f"{prof.get('duplicate_rows', 0):,} duplicate rows")
 
-st.subheader("2️⃣  Canonical preview")
+st.subheader("Canonical preview")
 st.dataframe(canon.head(10), width="stretch")
 st.caption(f"Canonical shape: **{canon.shape[0]:,} rows × {canon.shape[1]} cols** · "
            f"{canon['entity_id'].nunique()} entities · "
@@ -389,7 +389,7 @@ st.caption(f"Canonical shape: **{canon.shape[0]:,} rows × {canon.shape[1]} cols
 
 
 tab_eda, tab_fcst, tab_tune, tab_anom, tab_drv, tab_rec, tab_chat = st.tabs(
-    ["📊 EDA", "🔮 Forecast", "🎛 Tuning", "🚨 Anomalies", "📈 Drivers", "📦 Recommendations", "💬 Ask"]
+    ["EDA", "Forecast", "Tuning", "Anomalies", "Drivers", "Recommendations", "Ask"]
 )
 
 # ----- EDA -----
@@ -483,11 +483,11 @@ with tab_fcst:
         c3.metric("Entities evaluated", ss.get('n_entities_evaluated', 0))
         col_a, col_b = st.columns(2)
         with col_a:
-            st.markdown("**🏆 Top 5 (best-predicted)**")
+            st.markdown("**Top 5 — best-predicted**")
             if ss.get("best_entities"):
                 st.dataframe(pd.DataFrame(ss["best_entities"]), width="stretch", hide_index=True)
         with col_b:
-            st.markdown("**🔧 Bottom 5 (hardest to predict)**")
+            st.markdown("**Bottom 5 — hardest to predict**")
             if ss.get("worst_entities"):
                 st.dataframe(pd.DataFrame(ss["worst_entities"]), width="stretch", hide_index=True)
 
@@ -619,7 +619,7 @@ with tab_drv:
     elif rep.r2_lift_vs_baseline is not None and rep.r2_lift_vs_baseline > 0:
         # Only show the success banner when the model is genuinely good
         st.success(
-            f"✅ The model **beats the seasonal-naïve baseline by R² lift "
+            f"The model **beats the seasonal-naïve baseline by R² lift "
             f"{rep.r2_lift_vs_baseline:+.3f}**. Absolute R² depends on how "
             f"forecastable the dataset is (small / noisy / single-entity data "
             f"is genuinely hard); what matters is the **improvement over a naïve "
@@ -627,9 +627,9 @@ with tab_drv:
         )
     elif rep.r2 < 0.3:
         st.info(
-            "💡 **Low R² is common for daily transactional data.** Try the "
-            "sidebar's frequency selector → switch to **W** (weekly) or **MS** "
-            "(monthly). Smoothing usually doubles R² on noisy daily series."
+            "Low R² is common for daily transactional data. Try the sidebar's "
+            "frequency selector — switch to **W** (weekly) or **MS** (monthly). "
+            "Smoothing usually doubles R² on noisy daily series."
         )
 
     st.markdown("**Top features (leakage-safe)**")
@@ -646,7 +646,7 @@ with tab_drv:
 with tab_rec:
     from retailmind.recommend import summary_metrics
 
-    st.markdown("### 📦 Order recommendations")
+    st.markdown("### Order recommendations")
     st.caption(
         "Periodic-review (R, S) inventory model. Every `review period` days you check "
         "stock and order up to a target level that covers demand until the next review "
@@ -658,7 +658,7 @@ with tab_rec:
                                help="How often you re-evaluate stock and place orders.")
 
     # --- On-hand inventory input ---
-    st.markdown("#### 🏬 Current on-hand stock (optional)")
+    st.markdown("#### Current on-hand stock (optional)")
     st.caption("Enter how many units you currently have per entity. Leave blank → assumes 0 (worst case: empty shelves).")
     forecast_entities = sorted(R["forecast"]["entity_id"].unique())
     oh_df = pd.DataFrame({"entity_id": [str(e) for e in forecast_entities], "on_hand": 0.0})
@@ -717,7 +717,7 @@ with tab_rec:
 
     # --- Visualization: forecast vs reorder point per entity ---
     if not recs.empty:
-        st.markdown("#### 📈 Forecast vs reorder point per entity")
+        st.markdown("#### Forecast vs reorder point per entity")
         pick = st.selectbox("Entity to visualize",
                              recs["entity_id"].tolist(), key="rec_ent")
         f = R["forecast"][R["forecast"]["entity_id"].astype(str) == pick]
@@ -744,7 +744,7 @@ with tab_chat:
 
     shim = _PipelineShim(R, mapping=auto_result)
 
-    st.markdown("#### 💬 Ask anything about your data")
+    st.markdown("#### Ask anything about your data")
     st.caption("Type your own question in the box below, **or** click an example to start.")
 
     examples = [
@@ -832,5 +832,5 @@ with tab_chat:
                     "has_recommendations": shim.recommendations is not None,
                 })
 
-st.sidebar.success("Pipeline complete ✅")
+st.sidebar.success("Pipeline complete.")
 st.sidebar.caption("⚡ Results cached — clicking buttons (incl. Ask) won't retrain.")
