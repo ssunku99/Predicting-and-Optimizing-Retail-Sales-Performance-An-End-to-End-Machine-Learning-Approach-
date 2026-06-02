@@ -138,8 +138,3 @@ that's worse than "just repeat last week".
   non-English columns you'd use the manual editor in the Streamlit
   app's first tab.
 
-## Acknowledgments
-
-- Datasets via Kaggle: Rossmann Store Sales, Walmart Retail Data.
-- The Regis University MSDS faculty and my Practicum 2 advisors for
-  feedback throughout.
