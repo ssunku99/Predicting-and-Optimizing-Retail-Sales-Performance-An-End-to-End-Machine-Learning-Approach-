@@ -368,7 +368,7 @@ canon = R["canon"]
 
 # Smart-inference banner — surface what the pipeline auto-decided
 if R.get("decisions"):
-    with st.expander(f"🤖 **{len(R['decisions'])} smart-inference decisions** "
+    with st.expander(f"**{len(R['decisions'])} smart-inference decisions** "
                      f"(chosen freq: `{R.get('chosen_freq', 'D')}`)", expanded=True):
         st.markdown(R["decisions_md"])
 

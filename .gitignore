@@ -34,5 +34,4 @@ Untitled*.ipynb
 # (keep docs/ since that's the GitHub Pages deployable)
 notebooks/_smoke*.ipynb
 notebooks/*_executed.ipynb
-.claude/
 tests/_stress_data/
