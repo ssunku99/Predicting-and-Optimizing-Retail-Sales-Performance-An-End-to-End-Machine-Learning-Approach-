@@ -19,19 +19,6 @@ pipeline gives you back:
 
 The goal was to make this work across different retail datasets without having to rewrite the code every time. I tested it on two very different datasets—Rossmann, which has around a million rows of daily store sales, and Walmart, which is much smaller with about 8,000 rows of transactional data. The key idea that made this possible was adding a schema mapper in between, which helps identify what each column represents in the raw data so the rest of the pipeline can stay the same.
 
-## Running it locally
-
-```bash
-git clone https://github.com/ssunku99/Predicting-and-Optimizing-Retail-Sales-Performance-An-End-to-End-Machine-Learning-Approach-.git
-cd Predicting-and-Optimizing-Retail-Sales-Performance-An-End-to-End-Machine-Learning-Approach-
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-It opens in your browser. There's a "Use bundled samples" option in
-the sidebar that loads the Rossmann data shipped with the repo, so
-you can try the whole thing without uploading anything.
-
 ## What's in the folder
 
 ```
