@@ -39,10 +39,22 @@ ROLE_NAME_HINTS: dict[ColumnRole, tuple[str, ...]] = {
         "invoice amount", "invoice value", "invoice total",
         "subtotal", "grand total", "grandtotal",
         "income", "earnings", "receipts",
+        # Currency-suffixed names common in government / wholesale datasets
+        # (e.g. Iowa Liquor's `sale_dollars`, FRED retail series).
+        "sale_dollars", "sale dollars", "sales_dollars", "sales dollars",
+        "dollars", "usd", "amount_usd",
         "amount", "total", "value",  # broad fallbacks at the end
     ),
-    ColumnRole.QUANTITY: ("quantity", "qty", "units sold", "units", "order quantity",
-                           "ordered qty", "volume", "count"),
+    ColumnRole.QUANTITY: (
+        "quantity", "qty", "units sold", "units", "order quantity",
+        "ordered qty", "count",
+        # Iowa Liquor specifically calls quantity 'sale_bottles' / 'bottles sold'
+        "sale_bottles", "sale bottles", "bottles sold", "bottles_sold",
+        # Removed plain "volume" — it matched product-attribute columns like
+        # `bottle_volume_ml`, leading to the wrong column being promoted.
+        # Keep the more specific patterns only.
+        "sales volume", "order volume", "units volume",
+    ),
     ColumnRole.UNIT_PRICE: ("unit price", "unit_price", "unitprice", "list price",
                             "selling price", "sale price", "saleprice",
                             "sales per unit", "revenue per unit", "unit revenue",
@@ -124,6 +136,16 @@ class SchemaMapper:
             key=lambda c: -(guesses[c][0].confidence if guesses[c] else 0),
         )
         for col in ranked:
+            # All-NaN columns cannot meaningfully be sales, quantity, date,
+            # entity_id or any other role. Force them to AUX so downstream
+            # fix-ups (e.g. the SALES auto-promotion below) never pick them
+            # up. This was the root cause of the Iowa Liquor crash where
+            # 'county_number' (100% null in 2024 onwards) got promoted to
+            # quantity → sales and then crashed feature engineering with
+            # "cannot convert float NaN to integer".
+            if df[col].isna().all():
+                resolved[col] = ColumnRole.AUX if self.allow_aux else ColumnRole.IGNORE
+                continue
             col_guesses = guesses[col]
             assigned = False
             for g in col_guesses:
@@ -221,6 +243,13 @@ class SchemaMapper:
             return max(0.1, base - 0.4)
         if role == ColumnRole.DATE and not pd.api.types.is_datetime64_any_dtype(s):
             return base - 0.1  # may still parse later
+        # Geographic / categorical roles can't be numeric. A column named
+        # `state_bottle_cost` (numeric dollars) should NOT be matched to the
+        # STATE role just because the substring "state" appears in the name.
+        categorical_roles = {ColumnRole.STATE, ColumnRole.CITY, ColumnRole.REGION,
+                             ColumnRole.CUSTOMER_SEGMENT, ColumnRole.PRODUCT_CATEGORY}
+        if role in categorical_roles and pd.api.types.is_numeric_dtype(s):
+            return max(0.0, base - 0.6)
         return base
 
     def _collect_warnings(self, schema: CanonicalSchema, df: pd.DataFrame) -> list[str]:
