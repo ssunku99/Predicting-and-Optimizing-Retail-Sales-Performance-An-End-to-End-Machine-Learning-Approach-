@@ -1,0 +1,38 @@
+# Python venv — never commit these (huge, machine-specific)
+.venv/
+venv/
+env/
+
+# Python bytecode + caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Temp / scratch
+*.log
+/tmp/
+Untitled.ipynb
+Untitled*.ipynb
+
+# Generated outputs that can be re-built
+# (keep docs/ since that's the GitHub Pages deployable)
+notebooks/_smoke*.ipynb
+notebooks/*_executed.ipynb
+.claude/
+tests/_stress_data/

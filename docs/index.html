@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RetailMind</title>
+  <style>
+    body { font-family: Georgia, 'Times New Roman', serif; max-width: 720px;
+           margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.7;
+           font-size: 17px; }
+    h1 { font-size: 28px; font-weight: normal; margin-bottom: 6px; }
+    h2 { font-size: 20px; font-weight: normal; margin-top: 36px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+    .sub { color: #666; font-style: italic; margin-top: 0; }
+    a { color: #1a4a8a; }
+    a:hover { text-decoration: underline; }
+    ul { padding-left: 20px; }
+    li { margin: 6px 0; }
+    code { background: #f4f4f4; padding: 1px 5px; font-size: 14px; font-family: Menlo, Consolas, monospace; }
+    pre { background: #f4f4f4; padding: 12px 16px; overflow-x: auto; font-size: 13px;
+          font-family: Menlo, Consolas, monospace; }
+    .links { margin: 18px 0; }
+    .links a { display: inline-block; margin-right: 18px; }
+    footer { margin-top: 50px; color: #888; font-size: 13px; border-top: 1px solid #ddd; padding-top: 16px; }
+  </style>
+</head>
+<body>
+
+  <h1>RetailMind</h1>
+  <p class="sub">Data Science Practicum 2 project by Sai Teja Sunku, Regis University.</p>
+
+  <p>
+    This is a small project I built to answer one question. Big retailers like
+    Walmart and Costco have data teams that handle forecasting and inventory.
+    Independent shops do not. Can I build one pipeline that any retailer
+    could point at their own sales spreadsheet and get back the same useful
+    output: forecasts, anomaly alerts, drivers, and reorder suggestions.
+  </p>
+
+  <p>
+    I tested it on two datasets that look nothing alike. Rossmann store sales
+    (about a million daily rows across 1,115 stores) and Walmart Retail
+    (about eight thousand transactional orders with no store column at all).
+    The same code runs both end to end without changes.
+  </p>
+
+  <h2>Reports</h2>
+  <p>Both reports are produced by the same pipeline on each dataset.</p>
+  <ul>
+    <li><a href="rossmann.html">Rossmann store sales report</a></li>
+    <li><a href="walmart.html">Walmart retail report</a></li>
+    <li><a href="online_retail.html">UCI online retail report</a></li>
+  </ul>
+
+  <h2>Try it on your own data</h2>
+  <p>
+    The interactive Streamlit app lets you upload any retail CSV or Excel file
+    and watch the pipeline run. Link will be added once the deployment is up:
+  </p>
+  <p><a href="#">RetailMind on Streamlit Cloud</a></p>
+
+  <h2>Code</h2>
+  <p>
+    The repository is on GitHub at
+    <a href="https://github.com/ssunku99/Retailmind">github.com/ssunku99/Retailmind</a>.
+    The README explains how to run it locally and how the modules fit together.
+  </p>
+
+  <pre>git clone https://github.com/ssunku99/Retailmind
+cd Retailmind
+pip install -r requirements.txt
+streamlit run app.py</pre>
+
+  <h2>What the pipeline does</h2>
+  <ul>
+    <li>Reads the file and profiles it (quality score, missing rates, column candidates).</li>
+    <li>Auto detects which raw column plays each role using name patterns plus dtype.</li>
+    <li>Fills schema gaps. If a dataset has quantity and unit price but no sales column, it derives revenue. If there is no store column, it promotes country or region.</li>
+    <li>Picks daily, weekly, or monthly aggregation based on how dense the data is.</li>
+    <li>Engineers features. Calendar, lags, rolling stats, cyclical encodings. Excludes anything that would leak the target.</li>
+    <li>Trains a LightGBM forecaster with walk forward cross validation and compares against a seasonal naive baseline.</li>
+    <li>Detects anomalies three different ways and explains each one in plain English.</li>
+    <li>Fits a driver model to show which features actually move sales.</li>
+    <li>Turns the forecast into reorder recommendations with a service level and lead time you choose.</li>
+    <li>Answers natural language questions about all of the above.</li>
+  </ul>
+
+  <h2>Verifying it works on other data</h2>
+  <p>
+    I wrote a stress test that generates eleven synthetic datasets imitating
+    common Kaggle retail shapes (Superstore, M5, Olist Brazilian, Indian
+    e-commerce, grocery POS, restaurant chain, SaaS MRR, and so on). All
+    eleven pass every stage end to end. You can re-run it from the repo:
+  </p>
+
+  <pre>python tests/stress_test_datasets.py</pre>
+
+  <p>
+    For a single file diagnostic that pinpoints exactly which stage breaks:
+  </p>
+
+  <pre>python diagnose.py path/to/your_file.csv</pre>
+
+  <footer>
+    Regis University, Master of Science in Data Science. Practicum 2 deliverable.
+  </footer>
+</body>
+</html>
