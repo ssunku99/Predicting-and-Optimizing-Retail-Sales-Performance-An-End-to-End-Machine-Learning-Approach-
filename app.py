@@ -739,8 +739,24 @@ with tab_rec:
 # ----- Chat / Q&A assistant -----
 with tab_chat:
     st.markdown("### Ask RetailMind")
-    st.caption("Natural-language Q&A over the pipeline outputs. Works **offline** by default "
-               "(no API key). Set `GROQ_API_KEY` for richer answers.")
+
+    # Server-side Groq key from Streamlit Secrets — never exposed to the browser.
+    # If present, visitors get richer answers without needing their own key, capped
+    # at a per-session quota so a single tab can't drain the demo budget.
+    try:
+        _server_key = st.secrets.get("GROQ_API_KEY") if hasattr(st, "secrets") else None
+    except Exception:
+        _server_key = None
+    SHARED_KEY_MODE = bool(_server_key)
+    SHARED_MAX_MSGS = 15
+
+    if SHARED_KEY_MODE:
+        _sent = st.session_state.get("chat_msg_count", 0)
+        st.caption(f"Powered by Groq · {max(0, SHARED_MAX_MSGS - _sent)}/{SHARED_MAX_MSGS} "
+                   "questions left in this session.")
+    else:
+        st.caption("Natural-language Q&A over the pipeline outputs. Works **offline** by default "
+                   "(no API key). Paste a Groq key for richer answers.")
 
     shim = _PipelineShim(R, mapping=auto_result)
 
@@ -772,65 +788,84 @@ with tab_chat:
         key="chat_input",
         help="Free-form — ask anything about EDA, forecast, anomalies, drivers, or recommendations.",
     )
-    mode_pick = st.radio("Mode", ["auto", "offline", "groq"], horizontal=True, index=0,
-                         help="auto = groq if a key is available, else offline. "
-                              "groq = force richer LLM answers (needs key below). "
-                              "offline = pure pipeline data, no LLM.")
+    if SHARED_KEY_MODE:
+        # Shared server-side key — no UI for mode / paste; fixed to Groq + cheap model.
+        mode_pick = "groq"
+        session_key = _server_key
+        groq_model_to_use = "llama-3.1-8b-instant"
+    else:
+        mode_pick = st.radio("Mode", ["auto", "offline", "groq"], horizontal=True, index=0,
+                             help="auto = groq if a key is available, else offline. "
+                                  "groq = force richer LLM answers (needs key below). "
+                                  "offline = pure pipeline data, no LLM.")
 
-    # In-app key field (session-only, never written to disk)
-    if mode_pick in ("auto", "groq"):
-        with st.expander("🔑 Groq API key (paste here for richer answers — never stored)",
-                          expanded=(mode_pick == "groq")):
-            pasted = st.text_input(
-                "Paste your Groq API key (starts with `gsk_`)",
-                value=st.session_state.get("groq_key", ""),
-                type="password",
-                key="groq_key_input",
-                help="Get a free key in 30 seconds at console.groq.com/keys "
-                     "— no credit card required.",
-            )
-            if pasted:
-                st.session_state["groq_key"] = pasted
-            if st.session_state.get("groq_key"):
-                st.caption("Key set for this session. Click Ask below.")
-            st.markdown("**How to get one (free, 30 seconds):**")
-            st.markdown("1. Open [console.groq.com/keys](https://console.groq.com/keys) "
-                         "and sign in with Google/GitHub.\n"
-                         "2. Click **Create API Key**, copy it.\n"
-                         "3. Paste it above.")
+        # In-app key field (session-only, never written to disk)
+        if mode_pick in ("auto", "groq"):
+            with st.expander("Groq API key (paste here for richer answers — never stored)",
+                              expanded=(mode_pick == "groq")):
+                pasted = st.text_input(
+                    "Paste your Groq API key (starts with `gsk_`)",
+                    value=st.session_state.get("groq_key", ""),
+                    type="password",
+                    key="groq_key_input",
+                    help="Get a free key in 30 seconds at console.groq.com/keys "
+                         "— no credit card required.",
+                )
+                if pasted:
+                    st.session_state["groq_key"] = pasted
+                if st.session_state.get("groq_key"):
+                    st.caption("Key set for this session. Click Ask below.")
+                st.markdown("**How to get one (free, 30 seconds):**")
+                st.markdown("1. Open [console.groq.com/keys](https://console.groq.com/keys) "
+                             "and sign in with Google/GitHub.\n"
+                             "2. Click **Create API Key**, copy it.\n"
+                             "3. Paste it above.")
 
-    session_key = st.session_state.get("groq_key") or None
-    gready, gstatus = groq_status(session_key)
-    if mode_pick == "groq":
-        if gready:
-            st.success(gstatus)
-        else:
-            st.warning(f"{gstatus}\n\n→ Click Ask anyway and you'll get the offline answer "
-                        "with a clear note about why Groq wasn't used.")
-    elif mode_pick == "auto":
-        if gready:
-            st.caption("ℹ️ auto-mode will use Groq (key detected).")
-        else:
-            st.caption("ℹ️ auto-mode will use offline (no Groq key set).")
+        session_key = st.session_state.get("groq_key") or None
+        groq_model_to_use = "llama-3.3-70b-versatile"
+        gready, gstatus = groq_status(session_key)
+        if mode_pick == "groq":
+            if gready:
+                st.success(gstatus)
+            else:
+                st.warning(f"{gstatus}\n\nClick Ask anyway and you'll get the offline answer "
+                            "with a clear note about why Groq wasn't used.")
+        elif mode_pick == "auto":
+            if gready:
+                st.caption("auto-mode will use Groq (key detected).")
+            else:
+                st.caption("auto-mode will use offline (no Groq key set).")
 
     if st.button("Ask", type="primary", key="ask_btn"):
-        try:
-            with st.spinner("Thinking…"):
-                answer = ask(shim, q, mode=mode_pick, api_key=session_key)
-            st.markdown("---")
-            st.markdown(answer)
-        except Exception as e:
-            st.error(f"Assistant error — {type(e).__name__}: {e}")
-            with st.expander("Debug info"):
-                st.write({
-                    "has_canonical": shim.canonical is not None,
-                    "has_eda_report": shim.eda_report is not None,
-                    "has_forecast_model": shim.forecast_model is not None,
-                    "has_forecast": shim.forecast is not None,
-                    "has_anomalies": shim.anomalies is not None,
-                    "has_driver_report": shim.driver_report is not None,
-                    "has_recommendations": shim.recommendations is not None,
-                })
+        # Per-session quota check (only when using the shared server-side key)
+        if SHARED_KEY_MODE and st.session_state.get("chat_msg_count", 0) >= SHARED_MAX_MSGS:
+            st.warning(
+                f"You've used all {SHARED_MAX_MSGS} questions in this session. "
+                "Refresh the page to start a new one."
+            )
+        else:
+            try:
+                with st.spinner("Thinking…"):
+                    answer = ask(shim, q, mode=mode_pick, api_key=session_key,
+                                 groq_model=groq_model_to_use)
+                st.markdown("---")
+                st.markdown(answer)
+                if SHARED_KEY_MODE:
+                    st.session_state["chat_msg_count"] = (
+                        st.session_state.get("chat_msg_count", 0) + 1
+                    )
+            except Exception as e:
+                st.error(f"Assistant error — {type(e).__name__}: {e}")
+                with st.expander("Debug info"):
+                    st.write({
+                        "has_canonical": shim.canonical is not None,
+                        "has_eda_report": shim.eda_report is not None,
+                        "has_forecast_model": shim.forecast_model is not None,
+                        "has_forecast": shim.forecast is not None,
+                        "has_anomalies": shim.anomalies is not None,
+                        "has_driver_report": shim.driver_report is not None,
+                        "has_recommendations": shim.recommendations is not None,
+                    })
 
 st.sidebar.success("Pipeline complete.")
 st.sidebar.caption("⚡ Results cached — clicking buttons (incl. Ask) won't retrain.")
