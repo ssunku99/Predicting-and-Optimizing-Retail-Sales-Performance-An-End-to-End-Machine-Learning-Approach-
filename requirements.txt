@@ -10,8 +10,7 @@ scipy>=1.11.0
 openpyxl>=3.1.0
 matplotlib>=3.7.0
 seaborn>=0.13.0
-# AutoML
+# AutoML for the driver-regression stage
 flaml>=2.1.0
-autots>=0.6.0
 # Optional: enables richer answers in the chat assistant. Offline mode works without it.
 groq>=0.4.0

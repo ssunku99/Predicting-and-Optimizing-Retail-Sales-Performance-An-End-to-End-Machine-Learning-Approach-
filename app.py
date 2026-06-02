@@ -423,28 +423,6 @@ with tab_eda:
 
 # ----- Forecast -----
 with tab_fcst:
-    # AutoTS toggle: trains 20+ time series models (ARIMA, Prophet, ETS, ...)
-    # and picks the winner. Slow but very thorough.
-    st.markdown("#### Model family")
-    use_autots = st.checkbox(
-        "Use AutoTS (searches across ARIMA, Prophet, ETS, GLM, SeasonalNaive, and others)",
-        value=False,
-        help="Default is LightGBM on engineered features. AutoTS trains many classical "
-             "time series models in parallel and picks whichever wins on internal CV. "
-             "Slower (2 to 5 minutes) but a clean answer to 'did you try other models'.",
-    )
-    if use_autots and st.button("Re-fit with AutoTS", type="primary", key="autots_btn"):
-        from retailmind.automl import train_autots_forecaster
-        with st.spinner("AutoTS training many time series models. This takes a few minutes..."):
-            df_sub = R.get("df_sub", R["canon"])
-            result = train_autots_forecaster(df_sub, horizon=horizon,
-                                              max_generations=5, model_list="fast")
-            st.session_state.results["autots"] = result
-            st.success(f"AutoTS winner: **{result.best_model_name}**")
-            if not result.leaderboard.empty:
-                st.markdown("**Leaderboard (top 10 models tried)**")
-                st.dataframe(result.leaderboard.head(10), width="stretch")
-
     model, fcst, baseline = R["model"], R["forecast"], R["baseline"]
     st.markdown("### Cross-validation metrics (walk-forward, 3 folds)")
     m = model.cv_metrics.get("mean", {}) if model.cv_metrics else {}
