@@ -41,6 +41,7 @@ from retailmind.ingest import load_dataset, load_file
 from retailmind.mapper import SchemaMapper, MappingResult
 from retailmind.schema import CanonicalSchema, ColumnRole
 from retailmind.canonical import canonicalize
+from retailmind.cleaning import clean_dataframe, CleaningReport
 from retailmind import eda
 from retailmind.forecast import (train_lgbm, predict_future, ForecastModel,
                                   seasonal_naive_forecast)
@@ -64,6 +65,8 @@ class RetailPipeline:
     profile_: Optional[DataProfile] = None
     decision_log: DecisionLog = field(default_factory=DecisionLog)
 
+    cleaned: Optional[pd.DataFrame] = None
+    cleaning_report: Optional[CleaningReport] = None
     canonical: Optional[pd.DataFrame] = None
     eda_report: Optional[dict] = None
     forecast_model: Optional[ForecastModel] = None
@@ -107,10 +110,22 @@ class RetailPipeline:
                 "decisions": self.decision_log.to_list(),
                 "freq": freq}
 
+    def clean_(self) -> pd.DataFrame:
+        """Explicit data-cleaning stage. Coerces dates, drops rows with no
+        date or sales, and handles returns/refunds. Logs what it removed."""
+        if self.chosen_freq is None:
+            self.profile_and_infer()
+        self.cleaned, self.cleaning_report = clean_dataframe(
+            self.raw, self.mapping.schema, log=self.decision_log
+        )
+        return self.cleaned
+
     def canonicalize_(self) -> pd.DataFrame:
         if self.chosen_freq is None:
             self.profile_and_infer()
-        self.canonical = canonicalize(self.raw, self.mapping.schema, freq=self.chosen_freq)
+        if self.cleaned is None:
+            self.clean_()
+        self.canonical = canonicalize(self.cleaned, self.mapping.schema, freq=self.chosen_freq)
         # Auto-filter tiny entities: drop those with < 10% of the median row count.
         # Small entities ruin global model training and per-entity reporting.
         if self.canonical["entity_id"].nunique() > 5:
@@ -272,6 +287,7 @@ class RetailPipeline:
     def run(self, **forecast_kwargs):
         """Smart, full end-to-end run."""
         self.profile_and_infer()
+        self.clean_()
         self.canonicalize_()
         self.eda_()
         self.forecast_(**forecast_kwargs)

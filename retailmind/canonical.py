@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 
 from retailmind.schema import CanonicalSchema, ColumnRole
+from retailmind.cleaning import clean_dataframe
 
 
 SUM_ROLES = {ColumnRole.SALES, ColumnRole.QUANTITY, ColumnRole.PROFIT, ColumnRole.CUSTOMERS}
@@ -54,30 +55,11 @@ def canonicalize(
     if date_col is None or sales_col is None:
         raise ValueError("Schema must have DATE and SALES roles assigned.")
 
-    df = raw.copy()
-    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-    df = df.dropna(subset=[date_col, sales_col])
-
-    if df.empty:
-        raise ValueError(
-            f"After dropping rows with missing date or sales, the dataset is "
-            f"empty. Likely causes: the date column '{date_col}' couldn't be "
-            f"parsed, or the sales column '{sales_col}' has all-missing values. "
-            f"Check the data and adjust the schema mapping if needed."
-        )
-
-    # Drop returns / refunds (negative sales rows). These distort forecasts
-    # because they're not part of the "what will I sell next" signal.
-    # If >40 % of rows are negative, we treat the column as a different concept
-    # (e.g. P&L) and keep them.
-    if pd.api.types.is_numeric_dtype(df[sales_col]):
-        n_before = len(df)
-        neg_share = (df[sales_col] < 0).mean()
-        if 0 < neg_share <= 0.4:
-            df = df[df[sales_col] >= 0]
-            # The number filtered is informational; canonicalize doesn't carry a log
-            # so this just affects downstream EDA stats silently. Decision_log entries
-            # are added at the pipeline layer instead.
+    # Cleaning is its own stage now (retailmind.cleaning). We still call it here
+    # so that direct callers of canonicalize() — notebooks, tests — get a clean
+    # frame. It is idempotent, so when the pipeline already ran the clean stage
+    # this is a cheap no-op.
+    df, _ = clean_dataframe(raw, schema, log=None)
 
     # Floor date to chosen freq
     df["_date"] = df[date_col].dt.to_period(_period_alias(freq)).dt.start_time

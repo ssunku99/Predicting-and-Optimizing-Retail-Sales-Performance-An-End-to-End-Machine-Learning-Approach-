@@ -187,7 +187,9 @@ def run_full_pipeline(raw, schema, freq, horizon, max_entities, progress_cb=None
 
     step("Profiling data + smart inference…", 5)
     pipe.profile_and_infer()
-    step("Canonicalizing…", 15)
+    step("Cleaning data…", 12)
+    pipe.clean_()
+    step("Canonicalizing…", 18)
     pipe.canonicalize_()
     step("EDA…", 25)
     pipe.eda_()
@@ -212,6 +214,7 @@ def run_full_pipeline(raw, schema, freq, horizon, max_entities, progress_cb=None
     return {
         "pipe": pipe,
         "canon": canon, "df_sub": df_sub,
+        "cleaning_report": pipe.cleaning_report,
         "eda_report": pipe.eda_report,
         "model": pipe.forecast_model, "forecast": pipe.forecast,
         "baseline": pipe.baseline_forecast,
@@ -379,6 +382,26 @@ if R.get("profile"):
     st.caption(f"{qcolor} Data-quality score: **{q}/100** · "
                 f"{prof.get('pct_missing', 0):.1f}% missing · "
                 f"{prof.get('duplicate_rows', 0):,} duplicate rows")
+
+# Cleaning summary — what the clean stage removed before aggregation
+cr = R.get("cleaning_report")
+if cr is not None and cr.rows_removed > 0:
+    parts = []
+    if cr.bad_dates_dropped:
+        parts.append(f"{cr.bad_dates_dropped:,} unparseable dates")
+    if cr.missing_sales_dropped:
+        parts.append(f"{cr.missing_sales_dropped:,} missing-sales rows")
+    if cr.returns_dropped:
+        parts.append(f"{cr.returns_dropped:,} return/refund rows")
+    st.info(
+        f"**Data cleaning:** kept {cr.rows_out:,} of {cr.rows_in:,} rows "
+        f"({cr.rows_removed:,} removed — " + ", ".join(parts) + ")."
+    )
+elif cr is not None and cr.returns_kept_as_pnl:
+    st.info(
+        "**Data cleaning:** no rows removed. Over 40% of rows have negative "
+        "sales, so the column looks like profit/P&L — those rows were kept."
+    )
 
 st.subheader("Canonical preview")
 st.dataframe(canon.head(10), width="stretch")
