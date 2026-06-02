@@ -13,7 +13,7 @@ Run with:
     streamlit run app.py
 
 Design note: every heavy computation is cached in ``st.session_state.results``
-so clicking the chat / tuning / download buttons doesn't trigger a full retrain.
+so clicking the chat / download buttons doesn't trigger a full retrain.
 """
 
 from __future__ import annotations
@@ -42,7 +42,6 @@ from retailmind.forecast import train_lgbm, predict_future, seasonal_naive_forec
 from retailmind.anomaly import detect_all
 from retailmind.regression import fit_driver_model
 from retailmind.recommend import recommend_orders, RecommendationParams
-from retailmind.tuning import tune_lgbm, QUICK_GRID, DEFAULT_GRID, explain_grid
 from retailmind.assistant import ask, groq_status
 
 
@@ -388,8 +387,8 @@ st.caption(f"Canonical shape: **{canon.shape[0]:,} rows × {canon.shape[1]} cols
            f"{canon['date'].min().date()} → {canon['date'].max().date()}")
 
 
-tab_eda, tab_fcst, tab_tune, tab_anom, tab_drv, tab_rec, tab_chat = st.tabs(
-    ["EDA", "Forecast", "Tuning", "Anomalies", "Drivers", "Recommendations", "Ask"]
+tab_eda, tab_fcst, tab_anom, tab_drv, tab_rec, tab_chat = st.tabs(
+    ["EDA", "Forecast", "Anomalies", "Drivers", "Recommendations", "Ask"]
 )
 
 # ----- EDA -----
@@ -508,38 +507,6 @@ with tab_fcst:
     st.plotly_chart(fig, width="stretch")
     st.download_button("⬇ Download forecast CSV", fcst.to_csv(index=False).encode(),
                        file_name="forecast.csv")
-
-# ----- Tuning -----
-with tab_tune:
-    st.markdown("### Hyperparameter tuning — walk-forward CV grid search")
-    st.caption("Searches a defensible LightGBM grid using the same walk-forward "
-               "time-series CV as the forecaster. Documented rationale below.")
-    grid_choice = st.radio("Grid size",
-                            ["Quick (4 combos × 2 folds)", "Default (12 combos × 3 folds)"],
-                            horizontal=True)
-    metric_choice = st.selectbox("Metric to optimise (lower is better)",
-                                  ["rmse", "mae", "smape"], index=0)
-    chosen_grid = QUICK_GRID if grid_choice.startswith("Quick") else DEFAULT_GRID
-    st.code(explain_grid(chosen_grid), language="text")
-
-    if st.button("Run tuning"):
-        with st.spinner("Tuning… (many small models with CV)"):
-            df_t = R["df_sub"]
-            n_folds = 2 if grid_choice.startswith("Quick") else 3
-            tune_res = tune_lgbm(df_t, grid=chosen_grid, metric=metric_choice,
-                                  n_folds=n_folds, verbose=False)
-            st.session_state.results["tuning"] = tune_res
-
-    if "tuning" in R or "tuning" in st.session_state.results:
-        tune_res = st.session_state.results["tuning"]
-        st.success(f"Best {tune_res.metric} = {tune_res.best_score:.2f}")
-        st.markdown("**Best parameters**")
-        st.json(tune_res.best_params)
-        st.markdown("**Full trial table (sorted)**")
-        st.dataframe(tune_res.all_trials, width="stretch")
-        st.download_button("⬇ Download trials CSV",
-                           tune_res.all_trials.to_csv(index=False).encode(),
-                           file_name="tuning_trials.csv")
 
 # ----- Anomalies -----
 with tab_anom:
