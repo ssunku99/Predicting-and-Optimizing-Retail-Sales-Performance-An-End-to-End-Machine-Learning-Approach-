@@ -263,11 +263,8 @@ if mode == "Upload my own":
         aux_paths = [write_uploaded(a) for a in (aux_ups or [])]
 else:
     sample = st.sidebar.selectbox("Pick a sample",
-                                   ["Rossmann (train.csv + store.csv)", "Walmart (xlsx)"])
-    if sample.startswith("Rossmann"):
-        main_path, aux_paths = "train.csv", ["store.csv"]
-    else:
-        main_path, aux_paths = "walmart Retail Data.xlsx", []
+                                   ["Rossmann (train.csv + store.csv)"])
+    main_path, aux_paths = "train.csv", ["store.csv"]
 
 freq = st.sidebar.selectbox("Aggregation frequency",
                             ["auto", "D", "W", "MS"], index=0,
