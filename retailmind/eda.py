@@ -12,25 +12,48 @@ import numpy as np
 import pandas as pd
 
 
+def _safe_int(x, default: int = 0) -> int:
+    """Cast x to int, returning `default` if x is NaN/None/inf rather than raising
+    `ValueError: cannot convert float NaN to integer`.  Defensive guard for cases
+    where upstream filtering leaves a degenerate aggregation."""
+    try:
+        if x is None:
+            return default
+        if isinstance(x, float) and (x != x or x in (float("inf"), float("-inf"))):
+            return default
+        return int(x)
+    except (TypeError, ValueError):
+        return default
+
+
 def overview(canon: pd.DataFrame) -> dict:
     """Top-line summary of the canonical dataframe."""
-    n_entities = canon["entity_id"].nunique()
-    date_min, date_max = canon["date"].min(), canon["date"].max()
-    span_days = (date_max - date_min).days + 1
-    total_sales = float(canon["sales"].sum())
-    nonzero_rate = float((canon["sales"] > 0).mean())
+    n_entities = canon["entity_id"].nunique() if "entity_id" in canon.columns else 0
+    date_series = canon.get("date")
+    if date_series is None or date_series.dropna().empty:
+        date_min = date_max = pd.NaT
+        span_days = 0
+        date_min_str = date_max_str = ""
+    else:
+        date_min, date_max = date_series.min(), date_series.max()
+        span_days = (date_max - date_min).days + 1 if pd.notna(date_min) and pd.notna(date_max) else 0
+        date_min_str = str(date_min.date()) if pd.notna(date_min) else ""
+        date_max_str = str(date_max.date()) if pd.notna(date_max) else ""
+    sales = canon["sales"] if "sales" in canon.columns else pd.Series(dtype=float)
+    total_sales = float(sales.sum()) if not sales.empty else 0.0
+    nonzero_rate = float((sales > 0).mean()) if not sales.empty else 0.0
     return {
-        "rows": int(len(canon)),
-        "entities": int(n_entities),
-        "date_min": str(date_min.date()),
-        "date_max": str(date_max.date()),
-        "span_days": int(span_days),
+        "rows": _safe_int(len(canon)),
+        "entities": _safe_int(n_entities),
+        "date_min": date_min_str,
+        "date_max": date_max_str,
+        "span_days": _safe_int(span_days),
         "total_sales": total_sales,
-        "mean_daily_sales": float(canon["sales"].mean()),
-        "median_daily_sales": float(canon["sales"].median()),
+        "mean_daily_sales": float(sales.mean()) if not sales.empty else 0.0,
+        "median_daily_sales": float(sales.median()) if not sales.empty else 0.0,
         "pct_nonzero_sales_days": nonzero_rate,
-        "sales_p95": float(canon["sales"].quantile(0.95)),
-        "sales_max": float(canon["sales"].max()),
+        "sales_p95": float(sales.quantile(0.95)) if not sales.empty else 0.0,
+        "sales_max": float(sales.max()) if not sales.empty else 0.0,
     }
 
 
@@ -76,8 +99,8 @@ def promo_lift(canon: pd.DataFrame) -> Optional[dict]:
         return None
     lift = (on.mean() / off.mean() - 1) if off.mean() else np.nan
     return {
-        "promo_days": int((canon["promo"] > 0).sum()),
-        "nonpromo_days": int((canon["promo"] == 0).sum()),
+        "promo_days": _safe_int((canon["promo"] > 0).sum()),
+        "nonpromo_days": _safe_int((canon["promo"] == 0).sum()),
         "mean_sales_on_promo": float(on.mean()),
         "mean_sales_off_promo": float(off.mean()),
         "naive_lift_pct": float(lift * 100) if not np.isnan(lift) else None,
